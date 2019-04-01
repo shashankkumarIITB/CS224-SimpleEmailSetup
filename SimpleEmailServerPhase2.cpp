@@ -196,6 +196,7 @@ void Validate(int serverfd, int sockfd, string s, map<string, string>& userdata,
 	if (!(isstring >> User >> username >> Pass >> password)) {
 		if (User != "User:" or Pass != "Pass:") {
 		cout << "Unknown command." << endl;
+		SendMessage(sockfd, "Unknown command.");
 		DeleteSocket(sockfd);
 		exit(100);
 		}
@@ -214,6 +215,7 @@ void Validate(int serverfd, int sockfd, string s, map<string, string>& userdata,
 				}
 				else {
 					cout << "Password incorrect." << endl;
+					SendMessage(sockfd, "Password incorrect.");
 					DeleteSocket(sockfd);
 					exit(100);	
 				}
@@ -224,6 +226,7 @@ void Validate(int serverfd, int sockfd, string s, map<string, string>& userdata,
 		}
 		if (!userfound){
 			cout << "Invalid User : " << username << endl;
+			SendMessage(sockfd, "Invalid user.");
 			DeleteSocket(sockfd);
 			exit(100);
 		}
@@ -241,6 +244,10 @@ int main(int argc, char*argv[]) {
 	
 	FileExists(filename,userdata);
 	bool dirExists = FolderExists(folderpath);
+	if (! dirExists) {
+		perror("Unable to access given user database.\nReason ");
+		exit(4);
+	}
 	
 	// Create a file descripter
 	int serverfd = CreateSocket();
@@ -253,26 +260,6 @@ int main(int argc, char*argv[]) {
 
 	BindSocket(serverfd, serverAddr);
 	ListenSocket(serverfd, portNum);
-<<<<<<< HEAD
-
-	struct sockaddr_in clientAddr;
-	int acceptfd = AcceptConnection(serverfd, clientAddr);
-
-	string recvmsg = ReceiveMessage(acceptfd);
-	
-	string username;
-	Validate(acceptfd, recvmsg, userdata, username);
-	
-	string recvmsg = ReceiveMessage(acceptfd);
-	if (recvmsg == "quit") {
-		cout << "Bye, " << username << endl;
-		DeleteSocket(acceptfd);
-		exit(0);
-	}
-	else {
-		cout << "Unknown command." << endl;
-		exit(100);
-=======
 	
 	while (true) {
 		struct sockaddr_in clientAddr;
@@ -308,10 +295,9 @@ int main(int argc, char*argv[]) {
 				break;
 			}
 		}
->>>>>>> 8ae3dd0... EmailPhase2 Completed.
 	}
 
-		/*
+	/*
 	Exit status :
 	0 => Success
 	1 => Wrong number of arguements
@@ -321,11 +307,8 @@ int main(int argc, char*argv[]) {
 		c) Listen failed
 		d) Accept failed		
 	3 => Password file not present
+	4 => Unable to access userdata directory
 	100 => Otherwise
 	*/
+
 }
-
-
-
-
-
