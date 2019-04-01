@@ -50,7 +50,7 @@ string ReceiveMessage(int sockfd) {
 }
 
 
-void SendMessage(int sockfd, string msg) {// char* buffer, int bufferlen) {
+void SendMessage(int sockfd, string msg) {
 	int bufferlen = 1024;
 	int bytesToSend = msg.length();
 	int bytesSent = 0;
