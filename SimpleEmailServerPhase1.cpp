@@ -132,14 +132,10 @@ string ReceiveMessage(int sockfd) {
 	char* buffer = new char[bufferlen + 1];
 	int bytesRecv = recv(sockfd, buffer, bufferlen + 1, 0);
 	return string(buffer);
-	/*while (bytesRecv != 0 or bytesRecv != -1) {
-		msg += string(buffer);
-		bytesRecv = recv(sockfd, buffer, bufferlen + 1, 0);
-	}*/
 }
 
 
-void SendMessage(int sockfd, string msg) {// char* buffer, int bufferlen) {
+void SendMessage(int sockfd, string msg) {
 	int bufferlen = 1024;
 	int bytesToSend = msg.length();
 	int bytesSent = 0;
