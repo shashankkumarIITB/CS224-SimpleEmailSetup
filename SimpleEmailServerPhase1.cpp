@@ -164,7 +164,7 @@ void Validate(int sockfd, string s, map<string, string>& userdata, string& user)
 		if (User != "User:" or Pass != "Pass:") {
 		cout << "Unknown command." << endl;
 		DeleteSocket(sockfd);
-		exit(4);
+		exit(100);
 		}
 	}
 	else {
@@ -182,7 +182,7 @@ void Validate(int sockfd, string s, map<string, string>& userdata, string& user)
 				else {
 					cout << "Password incorrect." << endl;
 					DeleteSocket(sockfd);
-					exit(4);	
+					exit(100);	
 				}
 			}
 			else {
@@ -192,7 +192,7 @@ void Validate(int sockfd, string s, map<string, string>& userdata, string& user)
 		if (!userfound){
 			cout << "Invalid User : " << username << endl;
 			DeleteSocket(sockfd);
-			exit(4);
+			exit(100);
 		}
 	}
 }
@@ -240,29 +240,30 @@ int main(int argc, char*argv[]) {
 	string username;
 	Validate(acceptfd, recvmsg, userdata, username);
 	
-	// Begin sending and receiving messages after authentication 
-	SendMessage(acceptfd, "It's getting cold.");
-	bool recvquit = false;
-	for (int i = 0; i < 100; i++) {
-		string recvmsg = ReceiveMessage(acceptfd);
-		if (recvmsg == "quit") {
-			recvquit = true;
-			cout << "Bye, " << username << endl;
-			DeleteSocket(acceptfd);
-			exit(5);
-		}
-		wait();
+	string recvmsg = ReceiveMessage(acceptfd);
+	if (recvmsg == "quit") {
+		cout << "Bye, " << username << endl;
+		DeleteSocket(acceptfd);
+		exit(0);
 	}
-	if (!recvquit) {
-		cout << "ERROR Closing connection.\nReason : Idle for too long." << endl;
-		exit(5);
+	else {
+		cout << "Unknown command." << endl;
+		exit(100);
 	}
-	
-	// Problem with the existence of file
-	// Clear the socket using setsocketopt
-	// Network byte order 10:00
-	// inet_aton() 12:41
-	// inet_noa()
+
+	/*
+	Exit status :
+	0 => Success
+	1 => Wrong number of arguements
+	2 => 
+		a) Socket creation failed
+		b) Bind failed
+		c) Listen failed
+		d) Accept failed		
+	3 => Password file not present
+	100 => Otherwise
+	*/
+
 }
 
 

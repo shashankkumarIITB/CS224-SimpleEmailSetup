@@ -95,11 +95,15 @@ int main(int argc, char* argv[]) {
 
 	// Receive reply from server
 	cout << "Server : " << ReceiveMessage(clientfd) << endl;
-	cout << "Server : " << ReceiveMessage(clientfd) << endl;
-
-	SendMessage(clientfd, "Winter Is Coming!");
-	SendMessage(clientfd, "And so is Thanos ;)");
 	SendMessage(clientfd, "quit");
+
+	/*
+	Exit status :
+	1 => Wrong number of arguements
+	2 => 
+		a) Socket creation failed
+		b) Bind failed
+	*/
 }
 
 
