@@ -1,19 +1,22 @@
 #include <arpa/inet.h>
 #include <cmath>
+#include <dirent.h>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <netinet/in.h>
 #include <sstream>
-#include <string.h> 
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/socket.h>
 
 using namespace std;
 
 
 void NumArguements(const int numarg) {
-	if (numarg != 2) {
-		cout << "Usage : [filename] [PortNumber] [Passwordfile]" << endl;	
+	if (numarg != 3) {
+		cout << "Usage : [filename] [PortNumber] [Passwordfile] [FolderPath]" << endl;	
 		exit(1);
 	}
 	return;
@@ -39,29 +42,63 @@ void FileExists(const string& filename, map<string, string>& userdata) {
 	    if (!(isstring >> username >> password)) { 
 	    	continue;
 	    }
-	    userdata.insert({username,password});
+	    userdata.insert({username, password});
 	}
   }
   return;
 }
 
 
+bool FolderExists (string folderpath) {
+	struct stat info;
+	char* buffer = new char[folderpath.length() + 1];
+	strcpy(buffer, folderpath.c_str());
+
+	if (stat(buffer, &info) != 0) {
+	// Check if the directory exists
+		return false;
+	}
+	else if (info.st_mode & S_IFDIR) {
+	// Check if the directory is accessible
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
+
+int NumFiles (string path) {
+	// Returns the number of files and folders present at the specifies path 
+	string s = ".";
+	string s1 = "..";
+	char *ptr = new char[2];
+	char *ptr1 = new char[3];
+	char *buffer = new char[path.length() + 1];
+	strcpy(ptr, s.c_str());
+	strcpy(ptr1, s1.c_str());
+	strcpy(buffer, path.c_str());
+	
+	int count = 0;
+	DIR *d;
+	struct dirent *dir;
+	d = opendir(buffer);
+	if (d) {
+		while ((dir = readdir(d)) != NULL) {
+			if (strcmp(ptr, dir->d_name) && strcmp(ptr1, dir->d_name)) {
+				// Uncomment the below line to display file/directory names
+				// cout << dir->d_name << endl;
+				count++;
+			}
+		}
+	}
+	return count;
+}
+
+
 int CreateSocket() {
 	// Create a socket with TCP protocol
 	int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-	/* 
-	The first agrument specifies the address domain.
-	1. AF_INET => The Internet domain for any two hosts on the internet
-	2. AF_UNIX => The Unix domain for two process sharing common file structure
-	
-	The second arguement tells about the type of socket.
-	1. SOCK_STREAM => Data read as continuous stream
-	2. SOCK_DGRAM => Data read in chunks
-	
-	The arguement represents the protocol used.
-	0 => The system will choose the most appropriate protocol.
-	TCP for SOCK_STREAM and UDP for SOCK_DGRAM 
-	*/
 	if (sockfd < 0) {
 		perror("ERROR opening socket \nReason ");
 		exit(2);
@@ -150,15 +187,16 @@ void SendMessage(int sockfd, string msg) {
 }
 
 
-void Validate(int sockfd, string s, map<string, string>& userdata, string& user) {
+void Validate(int serverfd, int sockfd, string s, map<string, string>& userdata, string& user) {
 	string User, Pass;
 	string username;
 	string password;
 	
 	istringstream isstring(s);
 	if (!(isstring >> User >> username >> Pass >> password)) {
-		if (User != "User:" or username != "" or Pass != "Pass:" or password != "") {
+		if (User != "User:" or Pass != "Pass:") {
 		cout << "Unknown command." << endl;
+		SendMessage(sockfd, "Unknown command.");
 		DeleteSocket(sockfd);
 		exit(100);
 		}
@@ -177,6 +215,7 @@ void Validate(int sockfd, string s, map<string, string>& userdata, string& user)
 				}
 				else {
 					cout << "Password incorrect." << endl;
+					SendMessage(sockfd, "Password incorrect.");
 					DeleteSocket(sockfd);
 					exit(100);	
 				}
@@ -187,64 +226,75 @@ void Validate(int sockfd, string s, map<string, string>& userdata, string& user)
 		}
 		if (!userfound){
 			cout << "Invalid User : " << username << endl;
+			SendMessage(sockfd, "Invalid user.");
 			DeleteSocket(sockfd);
 			exit(100);
 		}
 	}
 }
 
+
 int main(int argc, char*argv[]) {
-	// Check the number of arguements
 	int numarg = argc - 1;
 	
-	// Check for the right number of arguements
 	NumArguements(numarg);
 	string filename = argv[2];
+	string folderpath = argv[3];
 	map<string, string> userdata;
 	
-	// Check if the file exists
 	FileExists(filename,userdata);
+	bool dirExists = FolderExists(folderpath);
+	if (! dirExists) {
+		perror("Unable to access given user database.\nReason ");
+		exit(4);
+	}
 	
 	// Create a file descripter
 	int serverfd = CreateSocket();
-	// Get the port number from the input
 	int portNum = atoi(argv[1]);
 
-	// Create an entity of type sockaddr	
 	struct sockaddr_in serverAddr;
-	// Should match that of the socket
 	serverAddr.sin_family = AF_INET;
-	// Assign the port number entered by the user
 	serverAddr.sin_port = htons(portNum);
-	// Address of the host, for server = IP address of the machine
 	serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-	// Bind the socket
 	BindSocket(serverfd, serverAddr);
-			
-	// Listen on the socket
 	ListenSocket(serverfd, portNum);
+	
+	while (true) {
+		struct sockaddr_in clientAddr;
+		int acceptfd = AcceptConnection(serverfd, clientAddr);
 
-	// Accept connection request on the socket
-	struct sockaddr_in clientAddr;
-	int acceptfd = AcceptConnection(serverfd, clientAddr);
-	
-	// Receive messages from the client
-	string recvmsg = ReceiveMessage(acceptfd);
-	
-	// Validate username and password
-	string username;
-	Validate(acceptfd, recvmsg, userdata, username);
-	
-	string recvmsg = ReceiveMessage(acceptfd);
-	if (recvmsg == "quit") {
-		cout << "Bye, " << username << endl;
-		DeleteSocket(acceptfd);
-		exit(0);
-	}
-	else {
-		cout << "Unknown command." << endl;
-		exit(100);
+		string recvmsg = ReceiveMessage(acceptfd);
+		string username;
+		Validate(serverfd, acceptfd, recvmsg, userdata, username);
+		
+		while (true) {
+			recvmsg = ReceiveMessage(acceptfd);
+			if (recvmsg == "quit") {
+				string msg = "Bye, " + username; 
+				cout << msg << endl;
+				SendMessage(acceptfd, "Bye.");
+				break;
+			}
+			else if (recvmsg == "LIST") {
+				if (FolderExists(folderpath + username + "/")) {
+				int n = NumFiles(folderpath + username + "/");
+				cout << username << " : Number of files : " << n << endl;
+				SendMessage(acceptfd, "Number of files : " + to_string(n));
+				}
+				else {
+					cout << username << " : Folder read failed." << endl;
+					SendMessage(acceptfd, "Folder read failed.");
+					break;
+				}
+			}
+			else {
+				cout << "Unknown command." << endl;
+				SendMessage(acceptfd, "Unknown command.");
+				break;
+			}
+		}
 	}
 
 	/*
@@ -257,12 +307,8 @@ int main(int argc, char*argv[]) {
 		c) Listen failed
 		d) Accept failed		
 	3 => Password file not present
+	4 => Unable to access userdata directory
 	100 => Otherwise
 	*/
 
 }
-
-
-
-
-
