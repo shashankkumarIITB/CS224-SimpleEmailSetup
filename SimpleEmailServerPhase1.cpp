@@ -157,7 +157,7 @@ void Validate(int sockfd, string s, map<string, string>& userdata, string& user)
 	
 	istringstream isstring(s);
 	if (!(isstring >> User >> username >> Pass >> password)) {
-		if (User != "User:" or username != "" or Pass != "Pass:" or password != "") {
+		if (User != "User:" or username == "" or Pass != "Pass:" or password == "") {
 		cout << "Unknown command." << endl;
 		DeleteSocket(sockfd);
 		exit(100);
