@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <iostream>
 #include <netinet/in.h>
+#include <stdio.h> 
 #include <string.h> 
 #include <sys/socket.h>
 
@@ -14,6 +15,26 @@ void NumArguements(const int numarg) {
 		exit(1);
 	}
 	return;
+}
+
+
+bool FolderExists (string folderpath) {
+	// Check if the specified folder exists
+	struct stat info;
+	char* buffer = new char[folderpath.length() + 1];
+	strcpy(buffer, folderpath.c_str());
+
+	if (stat(buffer, &info) != 0) {
+	// Check if the directory exists
+		return false;
+	}
+	else if (info.st_mode & S_IFDIR) {
+	// Check if the directory is accessible
+		return true;
+	}
+	else {
+		return false;
+	}
 }
 
 
@@ -46,7 +67,9 @@ string ReceiveMessage(int sockfd) {
 	int bufferlen = 1024;
 	char* buffer = new char[bufferlen + 1];
 	int bytesRecv = recv(sockfd, buffer, bufferlen + 1, 0);
-	return string(buffer);
+	string recvmsg = string(buffer);
+	delete(buffer);
+	return recvmsg;
 }
 
 
@@ -61,9 +84,46 @@ void SendMessage(int sockfd, string msg) {
 		int sent = send(sockfd, buffer, currentBufferlen  + 1, 0);
 		bytesToSend = bytesToSend - sent + 1;
 		bytesSent = bytesSent + sent - 1;
+		delete(buffer);
 	}
 }
 
+
+void CreateFile(string filepath) {
+	// Create a file in the username directory
+	fstream file; 
+	file.open(filepath.c_str(), ios::out);
+	if (!file) {
+		cout << "File : " << filepath << " could not be created." << endl;
+		return;
+	}
+	cout << "File : " << filepath << " created successfully." << endl; 
+	file.close();
+	return;
+}
+
+
+void ReceiveFile(int sockfd, string username, string filename, int filesize) {
+	if (! FolderExists(username)) {
+		mkdir(username,0777)
+		cout << "Directory : " << directory << " created successfully." << endl;
+	}
+	string filepath = username + "/" + username;
+	CreateFile(filepath);
+	int bytesRecv = 0;
+	int bufferlen = 1024;
+	// Write to the file
+	ofstream file;
+	file.open(filepath.c_str());
+	while (bytesRecv >= filesize) {
+		char* buffer = new char[bufferlen];
+		int currentBytesRecv = recv(sockfd, buffer, bufferlen + 1, 0);
+		file << buffer;
+		bytesRecv += currentBytesRecv;
+		delete buffer;
+	}
+	file.close();
+}
 
 int main(int argc, char* argv[]) {
 	int numarg = argc - 1;
@@ -91,8 +151,22 @@ int main(int argc, char* argv[]) {
 
 	// Receive reply from server
 	cout << "Server : " << ReceiveMessage(clientfd) << endl;
+	SendMessage(clientfd, "LIST");
+	cout << "Server : " << ReceiveMessage(clientfd) << endl;
+	SendMessage(clientfd, "RETRV 4");
+	string filename = "4.txt";
+	string filesizeString = ReceiveMessage(clientfd);
+	cout << "Server : " << filesizeString << endl;
+	int filesize = atoi(filesizeString.substr(12).c_str());
+	if (filesize != 0) {
+		ReceiveFile(clientfd, username, filename, filesize);
+	}
+	else {
+		CreateFile(username + "/" + filename);
+	}
 	SendMessage(clientfd, "quit");
-
+	cout << "Server : " << ReceiveMessage(clientfd) << endl;
+	
 	/*
 	Exit status :
 	1 => Wrong number of arguements
