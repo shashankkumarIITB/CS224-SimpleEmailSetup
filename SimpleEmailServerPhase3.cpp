@@ -165,7 +165,7 @@ void SendMessage(int sockfd, string msg) {
 }
 
 
-void Validate(int sockfd, string s, string& user, map<string, string>& userdata) {
+bool Validate(int sockfd, string s, string& user, map<string, string>& userdata) {
 	string User, Pass;
 	string username;
 	string password;
@@ -175,14 +175,14 @@ void Validate(int sockfd, string s, string& user, map<string, string>& userdata)
 		cout << "Unknown command." << endl;
 		SendMessage(sockfd, "Unknown command.");
 		DeleteSocket(sockfd);
-		return;
+		return false;
 	}
 
 	if (User != "User:" or Pass != "Pass:" or username == "" or password == "") {
 	cout << "Unknown command." << endl;
 	SendMessage(sockfd, "Unknown command.");
 	DeleteSocket(sockfd);
-	return;
+	return false;
 	}
 
 	else {
@@ -196,12 +196,13 @@ void Validate(int sockfd, string s, string& user, map<string, string>& userdata)
 					string welcome = "Welcome, " + username;
 					cout << welcome << endl;
 					SendMessage(sockfd, welcome);
+					return true;
 				}
 				else {
 					cout << "Password incorrect." << endl;
 					SendMessage(sockfd, "Password incorrect.");
 					DeleteSocket(sockfd);
-					return;	
+					return false;	
 				}
 			}
 			// else {
@@ -212,7 +213,7 @@ void Validate(int sockfd, string s, string& user, map<string, string>& userdata)
 			cout << "Invalid User : " << username << endl;
 			SendMessage(sockfd, "Invalid user.");
 			DeleteSocket(sockfd);
-			return;
+			return false;
 		}
 	}
 }
@@ -249,66 +250,88 @@ int NumFiles (string path) {
 }
 
 
-void SendFile (int sockfd, string username, string filepath, string fileid) {
+int FileSize (const char* filename) {
+	// Returns  file size in bytes
+	streampos begin,end;
+	ifstream  file(filename, ios::binary);
+	begin = file.tellg();
+	file.seekg (0, ios::end);
+	end = file.tellg();
+	file.close();
+return (end-begin);
+}
+
+
+void SendFile (int sockfd, string username, string folderpath, string fileid) {
 	string s1 = ".";
 	string s2 = "..";
 	char *ptr1 = new char[2];
 	char *ptr2 = new char[3];
-	char *buffer = new char[filepath.length() + 1];
+	char *buffer = new char[folderpath.length() + 1];
 	strcpy(ptr1, s1.c_str());
 	strcpy(ptr2, s2.c_str());
-	strcpy(buffer, filepath.c_str());
+	strcpy(buffer, folderpath.c_str());
 	
 	bool filefound = false;
 	DIR *d;
 	struct dirent *dir;
 	d = opendir(buffer);
 	if (d) {
+
 		// Traverse through the directory
 		while ((dir = readdir(d)) != NULL) {
 			if (strcmp(ptr1, dir->d_name) && strcmp(ptr2, dir->d_name)) {
 				string temp = string(dir->d_name);
 				string tempsub = temp.substr(0,temp.find("."));
+
 				// Check if the filename contains the file number specified
 				if (stoi(tempsub) == stoi(fileid)) {
-					// Filename contains file number provided
 					filefound = true;
-					cout << username << " : Transferring : " << fileid << endl;
+					string filepath = folderpath + temp;
+					cout << username << " : Transferring : " << temp << endl;
+		
+					// Determine file size
+					int filesize = FileSize((filepath).c_str());
+					cout << "File size : " << filesize << endl;
+					SendMessage(sockfd, "File size : " + to_string(filesize));
+					
+					// Start sending the file content
+					// Method 1
+					int bytesSent = 0;
+					int defaultbufferlen = 1024;
+
+					ifstream is(filepath, ifstream::binary);
+					if (is) {
+						while (bytesSent != filesize) {
+							int bufferlen = min(defaultbufferlen, filesize - bytesSent);
+							char *buffer = new char[bufferlen + 1];
+							is.read(buffer, bufferlen);
+							send(sockfd, buffer, bufferlen + 1, 0);
+							bytesSent += bufferlen;
+							delete buffer;
+						}
+					}
+
+					/* // Method 2 
 					struct stat filest;
 					char *filedest = new char[filepath.length() + 1];
 					strcpy(filedest, filepath.c_str());
-					// Determine file size and send it over to the client
-					if (stat(filedest, &filest) != 0) {
-						cout << "File size : 0" << endl;
-						SendMessage(sockfd, "File size : 0");
-						break;
-					}
-					int filesize = filest.st_size;
-					cout << "File size : " << filesize << endl;
-					SendMessage(sockfd, "File size : " + to_string(filesize));
-					// Start sending the file content
-					/*int bytesSentsofar = 0;
-					int bufferlen = 1024;
-					// Open the specified file 
-					
-					char *read = new char;
-					read[0] = 'r'; 
-					FILE* fp = fopen(filedest, read);
-					while (bytesSentsofar >= filesize) {
+					char *write = new char[2];
+					write[0] = 'r';
+					write[1] = 'b';
+					FILE* fp = fopen(filedest, write);
+					while (bytesSent <= filesize) {
 						char *buffer = new char[bufferlen + 1];
-						int bytesRead = fread(buffer, 1, filesize - bytesSentsofar, fp);
-						int bytesSent = send(sockfd, buffer, bytesRead, 0);
-						if (bytesSent != bytesRead) {
-							cout << "ERROR Bytes lost during transmission." << endl;
-							break;
-						}
-						bytesSentsofar += bytesSent;
+						int currentBytesRead = fread(buffer, sizeof(char) ,bufferlen + 1, fp); 
+						int currentBytesSent = send(sockfd, buffer, bufferlen + 1, 0);
+						cout << "currentBytesSent : " << currentBytesSent << endl;
+						bytesSent += currentBytesSent - 1;
 						delete buffer;
 					}
 					fclose(fp);
-					return;
+					*/
 
-*/
+					return;
 				}
 			}
 		}
@@ -316,6 +339,7 @@ void SendFile (int sockfd, string username, string filepath, string fileid) {
 	if (! filefound) {
 		cout << "Message read fail." << endl;
 		SendMessage(sockfd, "Message read fail.");
+		DeleteSocket(sockfd);
 	}
 	delete(ptr1);
 	delete(ptr2);
@@ -363,9 +387,9 @@ int main(int argc, char*argv[]) {
 
 		string recvmsg = ReceiveMessage(acceptfd);
 		string username;
-		Validate(acceptfd, recvmsg, username, userdata);
+		bool authenticate = Validate(acceptfd, recvmsg, username, userdata);
 		
-		while (true) {
+		while (authenticate) {
 			recvmsg = ReceiveMessage(acceptfd);
 			cout << "Client : " << recvmsg << endl;
 			if (recvmsg == "quit") {
@@ -377,11 +401,14 @@ int main(int argc, char*argv[]) {
 			else if (recvmsg == "LIST") {
 				if (FolderExists(folderpath + username + "/")) {
 				int n = NumFiles(folderpath + username + "/");
-				SendMessage(acceptfd, "Number of files : " + to_string(n));
+				string msg = "Number of files : " + to_string(n);
+				cout << msg << endl;
+				SendMessage(acceptfd, msg);
 				}
 				else {
 					cout << username << " : Folder read failed." << endl;
 					SendMessage(acceptfd, "Folder read failed.");
+					break;
 				}
 			}
 
@@ -393,6 +420,7 @@ int main(int argc, char*argv[]) {
 			else {
 				cout << username << " : Unknown command." << endl;
 				SendMessage(acceptfd, "Unknown command.");
+				break;
 			}
 		}
 		DeleteSocket(acceptfd);
@@ -411,5 +439,4 @@ int main(int argc, char*argv[]) {
 	4 => Unable to access userdata directory
 	100 => Otherwise
 	*/
-
 }
