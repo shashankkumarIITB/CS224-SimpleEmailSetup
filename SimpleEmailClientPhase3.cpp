@@ -12,11 +12,39 @@ using namespace std;
 // Most of the comments have been provided in the SimpleEmailServerPhase1.cpp
 
 void NumArguements(const int numarg) {
-	if (numarg != 3) {
-		cout << "Usage : [filename] [ServerIPAddress]:[PortNumber] [Username] [Password]" << endl;	
+	if (numarg != 5) {
+		cout << "Usage : [filename] [Server IPAddress]:[Port Number] [Username] [Password] [File List] [Local Folder]" << endl;	
 		exit(1);
 	}
 	return;
+}
+
+
+void ParseList (string lst) {
+	int lstlen = lst.length();
+	bool parseable = true;
+	bool comma = false;
+	bool space = false;
+	for (int i = 0; i < lstlen; i++) {
+		if (isdigit(lst[i]) and !space) {
+			comma = true;
+		}
+		else if (lst[i] == ',' and comma and i != lstlen - 1) {
+			comma = true;
+			space = true;
+		}
+		else if (lst[i] == ' ' and space and i != lstlen - 1) {
+			space = false;
+		}
+		else {
+			parseable = false;
+			break;
+		}
+	}
+	if (! parseable) {
+		cout << "ERROR : Unable to parse the list of file(s)." << endl;
+		exit (3);
+	}
 }
 
 
@@ -96,19 +124,16 @@ bool FolderExists (string folderpath) {
 
 
 void CreateDirectory (string path) {
-	if (! FolderExists(path)) {
-		char *directory = new char[path.length()];
-		mkdir(strcpy(directory, path.c_str()),0777);
-		cout << "Directory : " << directory << " created successfully." << endl;
-	}
-	else {
-		cout << "Directory exists." << endl;
+	char *directory = new char[path.length()];
+	int check = mkdir(strcpy(directory, path.c_str()),0777);
+	if (check) {
+		perror("ERROR : Unable to create local directory.\nReason ");
+		exit(4);
 	}
 }
 
 
 int RemoveDirectory (const char* path) {
-	cout << "Removing directory : " << path << endl;
 	string s = "rm -rf " + string(path);
 	const char* command = s.c_str();
 	return system(command);
@@ -183,7 +208,10 @@ int main(int argc, char* argv[]) {
 	NumArguements(numarg);
 	string username = argv[2];
 	string password = argv[3];
-	
+	string filelist = argv[4];
+	ParseList(filelist);
+	string localfolder = argv[5];
+
 	int clientfd = CreateSocket();
 
 	// Parse arguement to get serverIP and port number
@@ -203,24 +231,52 @@ int main(int argc, char* argv[]) {
 	SendMessage(clientfd, login);
 	cout << "Server : " << ReceiveMessage(clientfd) << endl;
 	
+	// LIST	
 	SendMessage(clientfd, "LIST");
 	cout << "Server : " << ReceiveMessage(clientfd) << endl;
 	
-	SendMessage(clientfd, "RETRV 2");
+	// RETRV
+	int index = 0;
+	bool createfolder = true;
+	bool requestfile = false;
+	for (int i = 0; i < filelist.length(); i++) {
+		string fileid;
+		if (i == filelist.length() - 1) {
+			fileid = filelist.substr(index, i - index + 1);
+			requestfile = true;
+		}
 
-	string filename = "2";
-	string filesizeString = ReceiveMessage(clientfd);
-	cout << "Server : " << filesizeString << endl;
-	if (filesizeString != "File size : 0") {
-		int filesize = atoi(filesizeString.substr(12).c_str());
-		string filepath = username + "/" + filename;
-		RemoveDirectory(username.c_str());
-		CreateDirectory(username.c_str());
-		CreateFile(username + "/" + filename);
-		if (filesize != 0) {
-			ReceiveFile(clientfd, filepath, filesize);
+		if (filelist[i] == ',') {
+			fileid = filelist.substr(index, i - index);
+			requestfile = true;
+			index = i + 2;
+		}
+
+		if (requestfile) {
+			requestfile = false;
+			SendMessage(clientfd, "RETRV " + fileid);
+			string filename = ReceiveMessage(clientfd);
+			cout << "Server : " << filename << endl;
+			string filesizeString = ReceiveMessage(clientfd);
+			cout << "Server : " << filesizeString << endl;
+
+			int filesize = atoi(filesizeString.substr(12).c_str());
+			string filepath = localfolder + "/" + filename;
+			
+			if (createfolder) {
+				RemoveDirectory(localfolder.c_str());
+				CreateDirectory(localfolder.c_str());
+				createfolder = false;
+			}
+			CreateFile(filepath);
+			if (filesize != 0) {
+				ReceiveFile(clientfd, filepath, filesize);
+			}
+			cout << "Downloaded message : " << fileid << endl;
 		}
 	}
+
+	// QUIT
 	SendMessage(clientfd, "quit");
 
 	/*

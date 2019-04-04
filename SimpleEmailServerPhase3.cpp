@@ -290,9 +290,9 @@ void SendFile (int sockfd, string username, string folderpath, string fileid) {
 					string filepath = folderpath + temp;
 					cout << username << " : Transferring : " << temp << endl;
 		
-					// Determine file size
+					// Send file name and file size
+					SendMessage(sockfd, temp);
 					int filesize = FileSize((filepath).c_str());
-					cout << "File size : " << filesize << endl;
 					SendMessage(sockfd, "File size : " + to_string(filesize));
 					
 					// Start sending the file content
@@ -360,7 +360,7 @@ int main(int argc, char*argv[]) {
 		pathlen++;
 	}
 	const char *folderpath = path.c_str();
-	
+
 	map<string, string> userdata;
 	FileExists(filename,userdata);
 	bool dirExists = FolderExists(folderpath);
