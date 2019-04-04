@@ -150,34 +150,41 @@ string ReceiveMessage(int sockfd) {
 
 void SendMessage(int sockfd, string msg) {
 	int bufferlen = 1024;
-	int bytesToSend = msg.length();
 	int bytesSent = 0;
-	while (bytesToSend != 0) {
-		int currentBufferlen = min(bufferlen, bytesToSend);
-		char* buffer = new char[currentBufferlen + 1];
-		strcpy(buffer, msg.substr(bytesSent, currentBufferlen).c_str());
-		int sent = send(sockfd, buffer, currentBufferlen  + 1, 0);
+	int bytesToSend = msg.length();
+	while (bytesToSend >= 0) {
+		// int currentBufferlen = min(bufferlen, bytesToSend);
+		char* buffer = new char[bufferlen + 1];
+		strcpy(buffer, msg.substr(bytesSent, bufferlen + 1).c_str());
+		int sent = send(sockfd, buffer, bufferlen + 1, 0);
 		bytesToSend = bytesToSend - sent + 1;
 		bytesSent = bytesSent + sent - 1;
 		delete(buffer);
 	}
+	return;
 }
 
 
-void Validate(int serverfd, int sockfd, string s, map<string, string>& userdata, string& user) {
+void Validate(int sockfd, string s, string& user, map<string, string>& userdata) {
 	string User, Pass;
 	string username;
 	string password;
 	
 	istringstream isstring(s);
 	if (!(isstring >> User >> username >> Pass >> password)) {
-		if (User != "User:" or Pass != "Pass:") {
 		cout << "Unknown command." << endl;
 		SendMessage(sockfd, "Unknown command.");
 		DeleteSocket(sockfd);
-		exit(100);
-		}
+		return;
 	}
+
+	if (User != "User:" or Pass != "Pass:" or username == "" or password == "") {
+	cout << "Unknown command." << endl;
+	SendMessage(sockfd, "Unknown command.");
+	DeleteSocket(sockfd);
+	return;
+	}
+
 	else {
 	// Check if the user and password specifies belongs to the database 
 		bool userfound = false;
@@ -194,18 +201,18 @@ void Validate(int serverfd, int sockfd, string s, map<string, string>& userdata,
 					cout << "Password incorrect." << endl;
 					SendMessage(sockfd, "Password incorrect.");
 					DeleteSocket(sockfd);
-					exit(100);	
+					return;	
 				}
 			}
-			else {
-				continue;
-			}
+			// else {
+			// 	continue;
+			// }
 		}
 		if (!userfound){
 			cout << "Invalid User : " << username << endl;
 			SendMessage(sockfd, "Invalid user.");
 			DeleteSocket(sockfd);
-			exit(100);
+			return;
 		}
 	}
 }
@@ -280,7 +287,7 @@ void SendFile (int sockfd, string username, string filepath, string fileid) {
 					cout << "File size : " << filesize << endl;
 					SendMessage(sockfd, "File size : " + to_string(filesize));
 					// Start sending the file content
-					int bytesSentsofar = 0;
+					/*int bytesSentsofar = 0;
 					int bufferlen = 1024;
 					// Open the specified file 
 					
@@ -290,7 +297,7 @@ void SendFile (int sockfd, string username, string filepath, string fileid) {
 					while (bytesSentsofar >= filesize) {
 						char *buffer = new char[bufferlen + 1];
 						int bytesRead = fread(buffer, 1, filesize - bytesSentsofar, fp);
-						int bytesSent = send(sockfd, buffer, bufferlen, 0);
+						int bytesSent = send(sockfd, buffer, bytesRead, 0);
 						if (bytesSent != bytesRead) {
 							cout << "ERROR Bytes lost during transmission." << endl;
 							break;
@@ -299,9 +306,9 @@ void SendFile (int sockfd, string username, string filepath, string fileid) {
 						delete buffer;
 					}
 					fclose(fp);
-					break;
+					return;
 
-
+*/
 				}
 			}
 		}
@@ -317,13 +324,20 @@ void SendFile (int sockfd, string username, string filepath, string fileid) {
 
 
 int main(int argc, char*argv[]) {
-	int numarg = argc - 1;
-	
+	const int numarg = argc - 1;
 	NumArguements(numarg);
-	string filename = argv[2];
-	string folderpath = argv[3];
-	map<string, string> userdata;
+
+	const char* filename = argv[2];
+	string tempfolderpath = argv[3];
+	string path = tempfolderpath;
+	int pathlen = path.length();	
+	if (path[pathlen - 1] != '/') {
+		path += '/';
+		pathlen++;
+	}
+	const char *folderpath = path.c_str();
 	
+	map<string, string> userdata;
 	FileExists(filename,userdata);
 	bool dirExists = FolderExists(folderpath);
 	if (! dirExists) {
@@ -332,8 +346,8 @@ int main(int argc, char*argv[]) {
 	}
 	
 	// Create a file descripter
-	int serverfd = CreateSocket();
-	int portNum = atoi(argv[1]);
+	const int serverfd = CreateSocket();
+	const int portNum = atoi(argv[1]);
 
 	struct sockaddr_in serverAddr;
 	serverAddr.sin_family = AF_INET;
@@ -345,12 +359,11 @@ int main(int argc, char*argv[]) {
 	
 	while (true) {
 		struct sockaddr_in clientAddr;
-		int acceptfd = AcceptConnection(serverfd, clientAddr);
+		const int acceptfd = AcceptConnection(serverfd, clientAddr);
 
 		string recvmsg = ReceiveMessage(acceptfd);
 		string username;
-		Validate(serverfd, acceptfd, recvmsg, userdata, username);
-		SendMessage(acceptfd, "Hello from server.");
+		Validate(acceptfd, recvmsg, username, userdata);
 		
 		while (true) {
 			recvmsg = ReceiveMessage(acceptfd);
@@ -358,27 +371,27 @@ int main(int argc, char*argv[]) {
 			if (recvmsg == "quit") {
 				string msg = "Bye, " + username; 
 				cout << msg << endl;
-				SendMessage(acceptfd, "Bye.");
 				break;
 			}
+
 			else if (recvmsg == "LIST") {
 				if (FolderExists(folderpath + username + "/")) {
 				int n = NumFiles(folderpath + username + "/");
-				cout << username << " : Number of files : " << n << endl;
 				SendMessage(acceptfd, "Number of files : " + to_string(n));
 				}
 				else {
 					cout << username << " : Folder read failed." << endl;
 					SendMessage(acceptfd, "Folder read failed.");
-					break;
 				}
 			}
+
 			else if (recvmsg.substr(0,5) == "RETRV") {
 				string fileid = recvmsg.substr(6); 
 				SendFile(acceptfd, username, folderpath + username + "/", fileid);
 			}
+
 			else {
-				cout << "Unknown command." << endl;
+				cout << username << " : Unknown command." << endl;
 				SendMessage(acceptfd, "Unknown command.");
 			}
 		}
